@@ -12,32 +12,48 @@ const PAuth = () => {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hoverState, setHoverState] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [username, setUsername] = useState('');
 
-const [showSuccess, setShowSuccess] = useState(false);
-
+//   const connectWallet = async () => {
+//   if (window.ethereum) {
+//     try {
+//       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+//       setWalletAddress(accounts[0]);
+//     } catch (err) {
+//       alert("Failed to connect wallet.");
+//     }
+//   } else {
+//     alert("MetaMask is not installed.");
+//   }
+// };
 
 const handleSubmit = async (e) => {
   e.preventDefault();
   setIsSubmitting(true);
 
   try {
-    // Call backend to store user
     const res = await axios.post('http://localhost:5000/api/register', {
+        username,
       email,
       password,
       role: activeTab,
+      // 🚫 remove walletAddress from here
     });
 
     if (res.status === 201) {
       setShowSuccess(true);
+
+localStorage.setItem('userEmail', email);
+localStorage.setItem('userRole', activeTab);
+      // Navigate to wallet connection page
       setTimeout(() => {
-        navigate('/connectwallet');
+        navigate('/connectwallet'); // On this page, you handle MetaMask
       }, 1500);
     }
-
   } catch (err) {
     console.error(err);
-    alert('Registration failed. Please try again.');
+    alert(err.response?.data?.message || 'Registration failed.');
   } finally {
     setIsSubmitting(false);
   }
@@ -148,6 +164,16 @@ const handleSubmit = async (e) => {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-4">
                 <FloatingInput 
+  id="username"
+  type="text"
+  value={username}
+  onChange={(e) => setUsername(e.target.value)}
+  label="Username"
+  placeholder="Enter unique username"
+  required
+/>
+
+                <FloatingInput 
                   id="email"
                   type="email"
                   value={email}
@@ -207,8 +233,11 @@ const handleSubmit = async (e) => {
             {showSuccess && (
   <div className="mt-4 text-green-400 text-center font-medium animate-pulse">
     ✅ Registered successfully! Redirecting to MetaMask...
+    
   </div>
+  // After successful login
 )}
+
 
           </div>
 
@@ -333,4 +362,4 @@ const FloatingInput = ({ id, label, ...props }) => {
   );
 };
 
-export default PAuth;
+export default PAuth;   

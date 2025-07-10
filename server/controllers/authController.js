@@ -19,5 +19,8 @@ exports.registerOrLogin = async (req, res) => {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  res.status(200).json({ message: 'Login successful', user });
-};
+res.status(200).json({ 
+  message: 'Login successful', 
+  user,
+  token: generateAuthToken(user) // Add this line
+});};
