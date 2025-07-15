@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
 import { UploadCloud, Copy, Share2, HardDrive, Users, Clock, X, Menu, FolderOpen, ChevronDown, ChevronUp, Lock, Calendar, Settings, LogOut, User, Bell, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { uploadToIPFS } from '../utils/uploadToIPFS';
 
-const PDashboardpage = () => {
+
+
+const PDashboardPage = () => {
   // State for user data and loading
   const [isLoading, setIsLoading] = useState(true);
   const [userData, setUserData] = useState(null);
@@ -25,7 +27,7 @@ const PDashboardpage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Patient account data - will be populated from userData
+  // Patient account data
   const [patientAccount, setPatientAccount] = useState({
     name: '',
     email: '',
@@ -46,7 +48,7 @@ const PDashboardpage = () => {
     { id: 4, name: 'St. Mary Hospital', role: 'Healthcare Provider', address: '0x4e5F6...7d8e', avatar: '🏥' }
   ]);
 
-  // Sample files data - in a real app, this would come from the backend
+  // Sample files data
   const sampleFiles = [
     { name: 'blood-test-results.pdf', cid: 'QmXyZ1234UtNxGuqRGGgw3s2mf', shared: true },
     { name: 'x-ray-scan.png', cid: 'QmAbC5678UtNxGuqRGGgw3s2mf', shared: false },
@@ -66,18 +68,14 @@ const PDashboardpage = () => {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        // In a real app, you would get this from localStorage or auth context
         const userEmail = localStorage.getItem('userEmail') || 'patient@example.com';
         const walletAddress = localStorage.getItem('walletAddress') || '0x7f3a...4b5c';
         
-        // Generate username from email
         const username = getUsernameFromEmail(userEmail);
         
-        // Simulate API call
         setTimeout(() => {
-          // Mock response with additional patient details
           const mockUserData = {
-            name: username || 'John Smith', // Use generated username or fallback
+            name: username || 'John Smith',
             email: userEmail,
             walletAddress: walletAddress,
             dob: '1985-07-15',
@@ -90,10 +88,7 @@ const PDashboardpage = () => {
           
           setUserData(mockUserData);
           setPatientAccount(mockUserData);
-          
-          // Set sample files for demo purposes
           setFiles(sampleFiles);
-          
           setIsLoading(false);
         }, 1000);
         
@@ -115,38 +110,63 @@ const PDashboardpage = () => {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
 
-    setIsUploading(true);
-    setUploadProgress(0);
 
-    // Simulate file upload with progress
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsUploading(false);
-            // Add the new file to the list
-            const newFile = {
-              name: file.name,
-              cid: `Qm${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-              shared: false
-            };
-            setFiles(prevFiles => [newFile, ...prevFiles]);
-            setUploadProgress(0);
-          }, 500);
-          return 100;
-        }
-        return prev + 10;
+const handleFileUpload = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    const ipfsUrl = await uploadToIPFS(file);
+    console.log("✅ File uploaded to:", ipfsUrl);
+    alert("File uploaded successfully!");
+
+    const newFile = {
+      name: file.name,
+      cid: ipfsUrl.split('/').pop(), // just the CID
+      url: ipfsUrl,
+      shared: false,
+      date: new Date().toISOString(),
+    };
+
+    // ⬇️ Update frontend state
+    setFiles(prev => [newFile, ...prev]);
+
+    // ⬇️ Save to backend MongoDB
+    const email = localStorage.getItem("email");
+    if (email) {
+      await fetch("http://localhost:5000/api/files/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newFile, email })
       });
-    }, 300);
-  };
+    }
 
+  } catch (err) {
+    console.error("❌ Upload failed:", err);
+    alert("Upload failed");
+  }
+};
+
+
+
+  
   const triggerFileInput = () => {
     fileInputRef.current.click();
+  };
+
+  const shareFile = (file) => {
+    const ipfsUrl = `https://ipfs.io/ipfs/${file.cid}`;
+    
+    if (navigator.share) {
+      navigator.share({
+        title: 'Medical Record',
+        text: `Check out my medical record: ${file.name}`,
+        url: ipfsUrl
+      }).catch(err => console.log('Error sharing:', err));
+    } else {
+      copyToClipboard(ipfsUrl);
+    }
   };
 
   const openShareModal = (file) => {
@@ -175,7 +195,6 @@ const PDashboardpage = () => {
   const confirmShare = () => {
     if (!selectedFile || selectedContacts.length === 0) return;
     
-    // Simulate sharing with encryption and time limit
     const sharedFiles = files.map(file => 
       file.cid === selectedFile.cid 
         ? { ...file, shared: true, sharedWith: selectedContacts.map(c => c.id) }
@@ -183,10 +202,7 @@ const PDashboardpage = () => {
     );
     
     setFiles(sharedFiles);
-    
-    // Show success message
     alert(`Successfully shared ${selectedFile.name} with ${selectedContacts.length} contact(s) for ${shareDays} days`);
-    
     closeShareModal();
   };
 
@@ -203,13 +219,12 @@ const PDashboardpage = () => {
   const handleAccountChange = (e) => {
     const { name, value } = e.target;
     
-    // If email is being changed, update the username as well
     if (name === 'email') {
       const username = getUsernameFromEmail(value);
       setPatientAccount(prev => ({
         ...prev,
         [name]: value,
-        name: username || prev.name // Update name only if we can extract from email
+        name: username || prev.name
       }));
     } else {
       setPatientAccount(prev => ({
@@ -221,19 +236,14 @@ const PDashboardpage = () => {
 
   const saveAccountChanges = () => {
     setIsEditing(false);
-    // Update user data with new account information
     setUserData(patientAccount);
-    // In a real app, you would save to backend here
     alert('Account information updated successfully!');
   };
 
   const handleLogout = () => {
-    // Clear user session
     localStorage.removeItem('userToken');
     localStorage.removeItem('userEmail');
     localStorage.removeItem('walletAddress');
-    
-    // Redirect to login page (in a real app)
     alert('You have been logged out');
   };
 
@@ -246,6 +256,8 @@ const PDashboardpage = () => {
   }
 
   return (
+    
+
     <div className="min-h-screen bg-gray-900 text-gray-100 flex">
       {/* Hidden file input */}
       <input 
@@ -357,28 +369,37 @@ const PDashboardpage = () => {
               </div>
               
               <div className="flex items-center gap-4">
-                <button className="p-2 text-gray-400 hover:text-cyan-400 rounded-full hover:bg-gray-800">
-                  <Bell size={20} />
-                </button>
-                <div className="relative">
-                  <input 
-                    type="text" 
-                    placeholder="Search..." 
-                    className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent placeholder-gray-500"
-                  />
-                  <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
-                </div>
-                
-                {activeView !== 'account' && (
-                  <button
-                    onClick={triggerFileInput}
-                    className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all"
-                  >
-                    <UploadCloud size={18} />
-                    Upload
-                  </button>
-                )}
-              </div>
+  <input
+    type="file"
+    ref={fileInputRef}
+    onChange={handleFileUpload}
+    className="hidden"
+  />
+
+  <button className="p-2 text-gray-400 hover:text-cyan-400 rounded-full hover:bg-gray-800">
+    <Bell size={20} />
+  </button>
+
+  <div className="relative">
+    <input 
+      type="text" 
+      placeholder="Search..." 
+      className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent placeholder-gray-500"
+    />
+    <Search size={18} className="absolute left-3 top-2.5 text-gray-500" />
+  </div>
+  
+  {activeView !== 'account' && (
+    <button
+      onClick={triggerFileInput}
+      className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all"
+    >
+      <UploadCloud size={18} />
+      Upload
+    </button>
+  )}
+</div>
+
             </div>
           </motion.div>
 
@@ -852,7 +873,7 @@ const PDashboardpage = () => {
         </div>
       </div>
     </div>
+    
   );
 };
-
-export default PDashboardpage;
+export default PDashboardPage;
