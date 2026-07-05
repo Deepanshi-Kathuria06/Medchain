@@ -26,6 +26,17 @@ const userSchema = new mongoose.Schema({
     unique: false,
     sparse: true,           
   },
+
+  // ✅ New fields (only meaningful if role === 'doctor')
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  available: {
+    type: Boolean,
+    default: true,
+  },
+
 }, { timestamps: true }); 
 
 module.exports = mongoose.model('User', userSchema);

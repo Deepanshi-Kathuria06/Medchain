@@ -155,6 +155,21 @@ const handleFileUpload = async (e) => {
     fileInputRef.current.click();
   };
 
+  useEffect(() => {
+  const fetchDoctors = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/doctors/available');
+      const data = await res.json();
+      setDoctorContacts(data); // setDoctorContacts is a useState
+    } catch (err) {
+      console.error("Failed to fetch doctors", err);
+    }
+  };
+
+  fetchDoctors();
+}, []);
+
+
   const shareFile = (file) => {
     const ipfsUrl = `https://ipfs.io/ipfs/${file.cid}`;
     
